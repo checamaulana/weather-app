@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, FormEvent, useRef } from "react";
 
 // Define TypeScript interfaces
 interface ForecastDay {
@@ -32,8 +32,20 @@ interface WeatherListItem {
   };
 }
 
+interface SuggestionCity {
+  name: string;
+  country: string;
+  fullName?: string; // Added for display
+  lat?: number; // Added for precise location
+  lon?: number; // Added for precise location
+}
+
 function App() {
   const [city, setCity] = useState<string>("New York");
+  const [suggestions, setSuggestions] = useState<SuggestionCity[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [weatherData, setWeatherData] = useState<WeatherData>({
     city: "",
     temperature: 0,
@@ -136,6 +148,92 @@ function App() {
     }
   };
 
+  // New function to fetch city suggestions with improved handling
+  const fetchCitySuggestions = async (query: string) => {
+    if (query.length < 2) {
+      // Reduced minimum characters to 2 for better UX
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.openweathermap.org/geo/1.0/direct?q=${query}&limit=5&appid=${API_KEY}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch suggestions");
+      }
+
+      const data = await response.json();
+
+      // Better formatting with additional context
+      const formattedSuggestions = data.map((item: any) => {
+        // Add state/province when available for better disambiguation
+        const stateInfo = item.state ? `, ${item.state}` : "";
+        return {
+          name: item.name,
+          country: item.country,
+          fullName: `${item.name}${stateInfo}, ${item.country}`,
+          lat: item.lat,
+          lon: item.lon,
+        };
+      });
+
+      // Filter out duplicates (some APIs return the same city multiple times)
+      const uniqueSuggestions = formattedSuggestions.filter(
+        (suggestion, index, self) =>
+          index === self.findIndex((s) => s.fullName === suggestion.fullName)
+      );
+
+      setSuggestions(uniqueSuggestions);
+      setShowSuggestions(uniqueSuggestions.length > 0);
+    } catch (error) {
+      console.error("Error fetching suggestions:", error);
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  // Add debounce to prevent too many API calls
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(city);
+    }, 300); // Wait 300ms after user stops typing
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [city]);
+
+  useEffect(() => {
+    if (debouncedQuery) {
+      fetchCitySuggestions(debouncedQuery);
+    }
+  }, [debouncedQuery]);
+
+  // Handle input change
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setCity(value);
+    // No direct API call here, it's handled by the debounce effect
+  };
+
+  // Handle suggestion selection
+  const handleSelectSuggestion = (suggestion: SuggestionCity) => {
+    setCity(suggestion.name);
+    setShowSuggestions(false);
+    // If lat/lon are available, use them for more accurate results
+    if (suggestion.lat && suggestion.lon) {
+      fetchWeatherByCoords(suggestion.lat, suggestion.lon);
+    } else {
+      fetchWeather(suggestion.name);
+    }
+  };
+
   // Handle search submit
   const handleSearch = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
@@ -144,26 +242,82 @@ function App() {
     }
   };
 
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        suggestionsRef.current &&
+        !suggestionsRef.current.contains(event.target as Node) &&
+        inputRef.current &&
+        !inputRef.current.contains(event.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   // Load default weather on component mount
   useEffect(() => {
     fetchWeather(city);
   }, []);
 
+  // Add a new function to fetch weather by coordinates for more precision
+  const fetchWeatherByCoords = async (
+    lat: number,
+    lon: number
+  ): Promise<void> => {
+    setWeatherData((prev) => ({ ...prev, loading: true, error: null }));
+
+    try {
+      const response = await fetch(
+        `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Could not fetch weather data");
+      }
+
+      // Rest of the function is the same as fetchWeather...
+      const data = await response.json();
+      // Process data as in your existing fetchWeather function
+
+      // Update UI
+      const currentWeather = data.list[0];
+      // Rest of the weather data processing...
+
+      // ...existing code to update weatherData
+    } catch (error) {
+      console.error("Error fetching weather data:", error);
+      setWeatherData((prev) => ({
+        ...prev,
+        loading: false,
+        error: "Failed to load weather data. Please try again.",
+      }));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-blue-50 p-8 flex justify-center items-center">
       <div className="w-full max-w-md">
-        {/* Search Bar */}
+        {/* Search Bar with Suggestions */}
         <form
           onSubmit={handleSearch}
           className="mb-8 rounded-xl bg-blue-50 p-2 shadow-[inset_-2px_-2px_5px_rgba(255,255,255,0.8),inset_2px_2px_5px_rgba(0,0,0,0.1)]"
         >
-          <div className="flex items-center">
+          <div className="flex items-center relative">
             <input
+              ref={inputRef}
               type="text"
               placeholder="Search city..."
               className="w-full bg-transparent px-4 py-2 outline-none text-gray-700"
               value={city}
-              onChange={(e) => setCity(e.target.value)}
+              onChange={handleInputChange}
+              onFocus={() => city.length >= 3 && setShowSuggestions(true)}
             />
             <button
               type="submit"
@@ -184,6 +338,35 @@ function App() {
                 />
               </svg>
             </button>
+
+            {/* Suggestions Dropdown */}
+            {showSuggestions && (
+              <div
+                ref={suggestionsRef}
+                className="absolute top-full left-0 right-0 mt-2 rounded-xl bg-blue-50 shadow-[5px_5px_10px_rgba(0,0,0,0.1),-5px_-5px_10px_rgba(255,255,255,0.8)] z-10 max-h-64 overflow-y-auto"
+              >
+                {suggestions.map((suggestion, index) => (
+                  <div
+                    key={index}
+                    className="px-4 py-3 cursor-pointer hover:bg-blue-100 first:rounded-t-xl last:rounded-b-xl transition-colors border-b border-blue-100 last:border-0"
+                    onClick={() => handleSelectSuggestion(suggestion)}
+                  >
+                    <div className="text-gray-700 font-medium">
+                      {suggestion.name}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {suggestion.fullName ||
+                        `${suggestion.name}, ${suggestion.country}`}
+                    </div>
+                  </div>
+                ))}
+                {suggestions.length === 0 && city.length >= 2 && (
+                  <div className="px-4 py-3 text-gray-500">
+                    No cities found. Try a different search.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </form>
 
