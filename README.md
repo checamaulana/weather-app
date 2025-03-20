@@ -131,6 +131,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 <div align="center">
-  <p>Made with ☀️ by <a href="https://github.com/yourusername">Your Name</a></p>
+  <p>Made with ☀️ by <a href="https://github.com/checamaulana">Checa Maulana</a></p>
   <p>If you found this project helpful, consider giving it a ⭐!</p>
 </div>
