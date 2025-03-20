@@ -11,8 +11,7 @@
 
 A beautiful, intuitive weather application featuring soft neumorphic UI design. Get real-time weather data for any city worldwide with a seamless user experience.
 
-
-## ✨ Features
+## ✨ Feature
 
 - **Elegant Neumorphic Design**: Soft shadows and subtle depth effects create a modern, tactile UI
 - **Real-time Weather Data**: Powered by OpenWeatherMap API
