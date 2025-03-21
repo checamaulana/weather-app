@@ -33,7 +33,7 @@ A beautiful, intuitive weather application featuring soft neumorphic UI design. 
 1. Clone the repository
 
    ```bash
-   git clone https://github.com/yourusername/weather-app.git
+   git clone https://github.com/checamaulana/weather-app.git
    cd weather-app
    ```
 
